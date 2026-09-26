@@ -1,0 +1,281 @@
+import random
+import copy
+
+# player is the person (-1) and agent is the computer (1)
+
+class Game:
+    def __init__(self):
+        self.SIZE = 4
+        self.board = [
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0]
+        ]
+
+        self.available_places = [(0,0),(0,1),(0,2),(0,3),(1,0),(1,1),(1,2),(1,3),(2,0),(2,1),(2,2),(2,3),(3,0),(3,1),(3,2),(3,3)]
+        # (row, col)- row- שורה col- עמודה
+
+        self.history = []
+        self.winner = None
+        self.finished = False
+
+    def player_move(self):
+        if self.finished:
+            return False
+
+        if not self.available_places:
+            return False
+
+        place = random.choice(self.available_places)
+        self.available_places.remove(place)
+        self.board[place[0]][place[1]] = -1
+
+        self.history.append(copy.deepcopy(self.board))
+
+        return True
+
+    def agent_move(self):
+        if self.finished:
+            return False
+
+        if not self.available_places:
+            return False
+
+        place = random.choice(self.available_places)
+        self.available_places.remove(place)
+        self.board[place[0]][place[1]] = 1
+
+        self.history.append(copy.deepcopy(self.board))
+
+        return True
+
+    def check_win(self, player):
+        # בדיקת שורות
+        for i in range(self.SIZE):
+            check = True
+            for k in range(self.SIZE):
+                if self.board[i][k] != player:
+                    check = False
+
+            if check:
+                self.finished = True
+                return True
+
+        # בדיקת עמודות
+        for i in range(self.SIZE):
+            check = True
+            for k in range(self.SIZE):
+                if self.board[k][i] != player:
+                    check = False
+
+            if check:
+                self.finished = True
+                return True
+
+        # בדיקת אלכסון ראשי
+        check = True
+        for i in range(self.SIZE):
+            if self.board[i][i] != player:
+                check = False
+        if check:
+            self.finished = True
+            return True
+
+        # בדיקת אלכסון משני
+        check = True
+        for i in range(self.SIZE):
+            if self.board[i][self.SIZE - i - 1] != player:
+                check = False
+        if check:
+            self.finished = True
+            return True
+
+        return False
+    def smart_move(self):
+
+        #lines
+        for i in range(self.SIZE):
+            col = 0
+            count0 = 0
+            broke = False
+            value = 0
+
+            for j in range(self.SIZE):
+                cur=self.board[i][j]
+
+                if  cur== 0:
+                    count0+=1
+                    col=j
+
+                elif value==0:
+                    if cur==1:
+                        value=1
+
+                    else:
+                        value=-1
+
+                elif cur != value:
+                    broke=True
+                    break
+
+            if not broke and count0==1:
+                self.board[i][col]=1
+                self.available_places.remove((i, col))
+
+                self.history.append(copy.deepcopy(self.board))
+                return True
+
+        #columns
+        for i in range(self.SIZE):
+            row = 0
+            count0 = 0
+            broke = False
+            value = 0
+
+            for j in range(self.SIZE):
+                cur=self.board[j][i]
+
+                if  cur== 0:
+                    count0+=1
+                    row=j
+
+                elif value==0:
+                    if cur==1:
+                        value=1
+
+                    else:
+                        value=-1
+
+                elif cur != value:
+                    broke=True
+                    break
+
+            if not broke and count0==1:
+                self.board[row][i]=1
+                self.available_places.remove((row,i))
+
+                self.history.append(copy.deepcopy(self.board))
+                return True
+
+        # main diagonals
+        col = 0
+        count0 = 0
+        broke = False
+        value = 0
+
+        for i in range(self.SIZE):
+
+            cur=self.board[i][i]
+            if cur == 0:
+                count0 += 1
+                col = i
+
+            elif value == 0:
+                if cur == 1:
+                    value = 1
+
+                else:
+                    value = -1
+
+            elif cur != value:
+                broke = True
+                break
+
+        if not broke and count0 == 1:
+            self.board[col][col] = 1
+            self.available_places.remove((col, col))
+
+            self.history.append(copy.deepcopy(self.board))
+            return True
+
+        col = 0
+        count0 = 0
+        broke = False
+        value = 0
+
+        # Anti diagonals
+        for i in range(self.SIZE):
+
+            cur = self.board[i][self.SIZE - i - 1]
+            if cur == 0:
+                count0 += 1
+                col = i
+
+            elif value == 0:
+                if cur == 1:
+                    value = 1
+
+                else:
+                    value = -1
+
+            elif cur != value:
+                broke = True
+                break
+
+        if not broke and count0 == 1:
+            self.board[col][self.SIZE - col - 1] = 1
+            self.available_places.remove((col, self.SIZE - col - 1))
+
+            self.history.append(copy.deepcopy(self.board))
+            return True
+
+        return False
+
+    def play(self):
+        while not self.finished:
+
+            # agent starts
+
+            status = self.smart_move()
+            if status:
+                print("smart move")
+
+            else:
+                self.agent_move()
+
+            if self.check_win(1):
+                return 1
+
+            if not self.available_places:
+                self.finished = True
+                return 0
+
+            # player plays
+            self.player_move()
+            if self.check_win(-1):
+                return -1
+
+            if not self.available_places:
+                self.finished = True
+                return 0
+
+    def rating(self):
+        grade= self.play()
+
+        if grade== 0:
+            grade=0.1
+
+        #list[start : stop : step]
+        reversed_history = self.history[::-1]
+
+        self.rated_boards=[]
+
+        for i in range(len(reversed_history)):
+            board=reversed_history[i]
+
+            self.rated_boards.append((board,grade))
+
+            grade *= 0.9
+
+        return self.rated_boards
+
+# הרצת המשחק
+if __name__ == "__main__":
+    game = Game()
+    result = game.play()
+
+    print("Winner:", result)
+    print("Board:")
+    for row in game.board:
+        print(row)
