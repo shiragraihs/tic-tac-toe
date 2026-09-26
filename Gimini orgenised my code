@@ -1,0 +1,158 @@
+import random
+import copy
+
+class Game:
+    def __init__(self):
+        self.SIZE = 4
+        self.board = [[0]*4 for _ in range(4)]
+        self.available_places = [(r, c) for r in range(4) for c in range(4)]
+        self.history = []
+        self.winner = None
+        self.finished = False
+
+    def _make_move(self, row, col, player):
+        """Centralized helper method for making any move."""
+        self.board[row][col] = player
+        if (row, col) in self.available_places:
+            self.available_places.remove((row, col))
+        self.history.append(copy.deepcopy(self.board))
+
+    def player_move(self):
+        if self.finished or not self.available_places:
+            return False
+        place = random.choice(self.available_places)
+        self._make_move(place[0], place[1], -1)
+        return True
+
+    def agent_move(self):
+        if self.finished or not self.available_places:
+            return False
+        place = random.choice(self.available_places)
+        self._make_move(place[0], place[1], 1)
+        return True
+
+    def check_win(self, player):
+        # Rows & Columns
+        for i in range(self.SIZE):
+            if all(self.board[i][k] == player for k in range(self.SIZE)) or \
+               all(self.board[k][i] == player for k in range(self.SIZE)):
+                self.finished = True
+                return True
+
+        # Diagonals
+        if all(self.board[i][i] == player for i in range(self.SIZE)) or \
+           all(self.board[i][self.SIZE - i - 1] == player for i in range(self.SIZE)):
+            self.finished = True
+            return True
+
+        return False
+
+    def smart_move(self):
+        # Lines
+        for i in range(self.SIZE):
+            col, count0, broke, value = 0, 0, False, 0
+            for j in range(self.SIZE):
+                cur = self.board[i][j]
+                if cur == 0:
+                    count0 += 1
+                    col = j
+                elif value == 0:
+                    value = cur
+                elif cur != value:
+                    broke = True
+                    break
+            if not broke and count0 == 1:
+                self._make_move(i, col, 1)
+                return True
+
+        # Columns
+        for i in range(self.SIZE):
+            row, count0, broke, value = 0, 0, False, 0
+            for j in range(self.SIZE):
+                cur = self.board[j][i]
+                if cur == 0:
+                    count0 += 1
+                    row = j
+                elif value == 0:
+                    value = cur
+                elif cur != value:
+                    broke = True
+                    break
+            if not broke and count0 == 1:
+                self._make_move(row, i, 1)
+                return True
+
+        # Main Diagonal
+        col, count0, broke, value = 0, 0, False, 0
+        for i in range(self.SIZE):
+            cur = self.board[i][i]
+            if cur == 0:
+                count0 += 1
+                col = i
+            elif value == 0:
+                value = cur
+            elif cur != value:
+                broke = True
+                break
+        if not broke and count0 == 1:
+            self._make_move(col, col, 1)
+            return True
+
+        # Anti Diagonal
+        col, count0, broke, value = 0, 0, False, 0
+        for i in range(self.SIZE):
+            cur = self.board[i][self.SIZE - i - 1]
+            if cur == 0:
+                count0 += 1
+                col = i
+            elif value == 0:
+                value = cur
+            elif cur != value:
+                broke = True
+                break
+        if not broke and count0 == 1:
+            self._make_move(col, self.SIZE - col - 1, 1)
+            return True
+
+        return False
+
+    def play(self):
+        while not self.finished:
+            if self.smart_move():
+                print("smart move")
+            else:
+                self.agent_move()
+
+            if self.check_win(1):
+                return 1
+
+            if not self.available_places:
+                self.finished = True
+                return 0
+
+            self.player_move()
+            if self.check_win(-1):
+                return -1
+
+            if not self.available_places:
+                self.finished = True
+                return 0
+
+    def rating(self):
+        grade = self.play()
+        if grade == 0:
+            grade = 0.1
+
+        reversed_history = self.history[::-1]
+        self.rated_boards = []
+
+        for board in reversed_history:
+            self.rated_boards.append((board, grade))
+            grade *= 0.9
+
+        return self.rated_boards
+
+if __name__ == "__main__":
+    game = Game()
+    rated_results = game.rating()
+    print("Rating completed! Total rated states:", len(rated_results))
