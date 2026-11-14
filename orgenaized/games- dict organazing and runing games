@@ -1,0 +1,431 @@
+import json
+import matplotlib.pyplot as plt
+import numpy as np
+
+from TicTacToe import Game  # תחליפי את 'game' בשם הקובץ האמיתי שלך אם הוא שונה
+from numpy.ma.testutils import almost
+
+
+class Games:
+    def __init__(self):
+        self.dict = {}
+
+    def add_to_dictionary(self, g):
+        for item in g.rated_str_boards:
+            grade = item[1]  # הציון של הלוח
+            key = item[0]
+            if key in self.dict:  # already exists
+                avg, count = self.dict[key]
+                new_avg = ((avg * count) + grade) / (count + 1)
+                new_count = count + 1
+                self.dict[key] = [new_avg, new_count]
+            else:
+                self.dict[key] = [grade, 1]
+
+    # 1. checks if string is actually 16 digs
+    def all16(self, dict):
+        ret = True
+        for key in dict:
+            if not len(key) == 16:
+                ret = False
+                break
+        return ret
+
+    # 2. checks if it was a win and there weren't bugs
+    def won(self, dict):
+        temp_g = Game()
+        for key, value in dict.items():
+            grade = value[0]
+            if grade >= 0.99:
+                temp_g.board = temp_g.str_to_board(key)
+                if not temp_g.check_win(1):
+                    return False  # נמצא לוח עם ציון של ניצחון, אבל הוא בפועל לא ניצחון!
+        return True
+
+    # 3. checks that each board that the AGENT is about to win has high grade
+    def near_win_high_grade(self, dict):
+        temp_g = Game()
+
+        almost_win_list=[]
+        for key, value in dict.items():
+            grade = value[0]  # הציון הממוצע של הלוח
+            board = temp_g.str_to_board(key)
+
+            is_near_win = False
+
+            # 1. בדיקת שורות
+            for row in board:
+                if row.count(1) == 3 and row.count(0) == 1 and row.count(-1) == 0:
+                    is_near_win = True
+                    break
+
+            # 2. בדיקת עמודות
+            if not is_near_win:
+                for col_idx in range(4):
+                    col = [board[row_idx][col_idx] for row_idx in range(4)]
+                    if col.count(1) == 3 and col.count(0) == 1 and col.count(-1) == 0:
+                        is_near_win = True
+
+                        break
+
+            # 3. בדיקת אלכסון ראשי
+            if not is_near_win:
+                main_diag = [board[i][i] for i in range(4)]
+                if main_diag.count(1) == 3 and main_diag.count(0) == 1 and main_diag.count(-1) == 0:
+                    is_near_win = True
+
+
+            # 4. בדיקת אלכסון משני
+            if not is_near_win:
+                anti_diag = [board[i][3 - i] for i in range(4)]
+                if anti_diag.count(1) == 3 and anti_diag.count(0) == 1 and anti_diag.count(-1) == 0:
+                    is_near_win = True
+
+
+            if is_near_win:
+                almost_win_list.append(key)
+                if grade < 0:
+                    return False  # באג! לוח רגע לפני ניצחון קיבל ציון נמוך מדי
+
+        return True
+
+    # 5. checks that there are only 0,1,2 in the strings
+    def valid_characters(self, dict):
+        allowed_chars = {'0', '1', '2'}
+
+        for key in dict:
+            for char in key:
+                if char not in allowed_chars:
+                    return False
+
+        return True
+
+    # 6. התפלגות ציונים וגרף
+    def plot_score_distribution(self, dict):
+        grades = [value[0] for value in dict.values()]
+
+        if not grades:
+            print("המילון ריק, אין עדיין ציונים להציג בגרף.")
+            return
+
+        try:
+            plt.figure(figsize=(9, 5))
+            plt.hist(grades, bins=10, color='royalblue', edgecolor='black', alpha=0.8)
+            plt.title("Score Distribution of Tic-Tac-Toe Agent States", fontsize=14, fontweight='bold')
+            plt.xlabel("State Grade Value", fontsize=12)
+            plt.ylabel("Number of States (Frequency)", fontsize=12)
+            plt.grid(axis='y', linestyle='--', alpha=0.6)
+            plt.show()
+        except Exception as e:
+            print(f"שגיאה בהצגת הגרף: {e}")
+
+    # 8. checks that the amount of moves of the agent is plus minus 1 compared to the player moves
+    def validate_turn_order(self, dict):
+        """
+        סעיף 8: בדיקת חוקיות תורות (Turn-order legality).
+        """
+        for board_str in dict.keys():
+            count_player = board_str.count('2')
+            count_agent = board_str.count('1')
+
+            if not (count_player <= count_agent <= count_player + 1):
+                return False
+
+        return True
+
+    # 9. checks that each board that the PLAYER is about to win has low grade
+    def near_lose_low_grade(self, dict):
+        temp_g = Game()
+
+        self.almost_lose_list=[]
+
+        for key, value in dict.items():
+            grade = value[0]
+            board = temp_g.str_to_board(key)
+
+            is_near_lose = False
+
+            # 1. בדיקת שורות
+            for row in board:
+                if row.count(-1) == 3 and row.count(0) == 1 and row.count(1) == 0:
+                    is_near_lose = True
+                    break
+
+            # 2. בדיקת עמודות
+            if not is_near_lose:
+                for col_idx in range(4):
+                    col = [board[row_idx][col_idx] for row_idx in range(4)]
+                    if col.count(-1) == 3 and col.count(0) == 1 and col.count(1) == 0:
+                        is_near_lose = True
+                        break
+
+            # 3. בדיקת אלכסון ראשי
+            if not is_near_lose:
+                main_diag = [board[i][i] for i in range(4)]
+                if main_diag.count(-1) == 3 and main_diag.count(0) == 1 and main_diag.count(1) == 0:
+                    is_near_lose = True
+
+            # 4. בדיקת אלכסון משני
+            if not is_near_lose:
+                anti_diag = [board[i][3 - i] for i in range(4)]
+                if anti_diag.count(-1) == 3 and anti_diag.count(0) == 1 and anti_diag.count(1) == 0:
+                    is_near_lose = True
+
+            if is_near_lose:
+                self.almost_lose_list.append(key)
+                if grade > 0:
+                    return False  # באג! לוח רגע לפני הפסד קיבל ציון חיובי בטעות
+
+        return True
+
+    @staticmethod
+    def train_and_save_random_games(num_games=300000, filename="tic_tac_toe_300k.json"):
+        """
+        מריץ 300,000 משחקים אקראיים לחלוטין (בלי חתירה לניצחון או מניעת הפסד),
+        בונה את מילון המצבים הכולל סימטריות וממוצעים מתגלגלים, ושומר לקובץ JSON.
+        """
+        knowledge_base = {}
+        win=0
+        lose=0
+        tie=0
+        print(f"התחלת אימון אקראי של {num_games} משחקים...")
+
+        for game_idx in range(num_games):
+            game = Game(filename)
+
+            while not game.finished:
+                if not game.agent_move():
+                    break
+
+                if game.check_win(1):
+                    win+=1
+                    game.winner = 1
+                    break
+
+                if not game.available_places:
+                    game.finished = True
+                    game.winner = 0
+                    tie+=1
+                    break
+
+                if not game.player_move():
+                    break
+
+                if game.check_win(-1):
+                    game.winner = -1
+                    lose+=1
+                    break
+
+                if not game.available_places:
+                    game.finished = True
+                    game.winner = 0
+                    tie+=1
+                    break
+
+            rated_boards = game.history_with_str()
+
+            for board_str, grade in rated_boards:
+                if board_str not in knowledge_base:
+                    knowledge_base[board_str] = [0.0, 0]
+
+                grade_sum, count = knowledge_base[board_str]
+                count += 1
+                new_grade = grade_sum + (grade - grade_sum) / count
+                knowledge_base[board_str] = [new_grade, count]
+
+            if (game_idx + 1) % 50000 == 0:
+                print(f"הושלמו {game_idx + 1} משחקים...")
+        print("win:", win, "lose:", lose, "tie:", tie)
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(knowledge_base, f, ensure_ascii=False, indent=4)
+
+        print(f"האימון הסתיים בהצלחה! סך הכל מצבים ייחודיים במילון: {len(knowledge_base)}")
+        print(f"המידע נשמר בקובץ: {filename}")
+        return knowledge_base
+
+
+    @staticmethod
+    def run_simulation_with_strategy(num_games=300000, strategy_name="dict", dict_filename="dict.json", train=True):
+        """
+        מריץ משחקים עם אסטרטגיה לבחירתך.
+        - train=True: יאמן את הסוכן תוך כדי משחק, יעדכן ציונים וישמור את המילון חזרה לקובץ בסוף.
+        - train=False: רק יריץ ויבדוק ביצועים בלי לשנות את המילון.
+        """
+        knowledge_base = {}
+
+        # טעינת המילון הקיים (אם ישנו)
+        if strategy_name == "dict" or train:
+            try:
+                with open(dict_filename, "r", encoding="utf-8") as f:
+                    knowledge_base = json.load(f)
+                print(f"המילון נטען בהצלחה עבור '{strategy_name}' (מכיל {len(knowledge_base)} מצבים).")
+            except FileNotFoundError:
+                print(f"אזהרה: קובץ {dict_filename} לא נמצא. מתחיל מילון חדש מאפס.")
+
+        player_wins = 0
+        agent_wins = 0
+        ties = 0
+
+        print(f"מתחיל הרצה של {num_games} משחקים באסטרטגיה: [{strategy_name}] (מצב אימון: {train})...")
+
+        for n in range(num_games):
+            # יוצרים משחק ומעבירים אליו את המילון הנוכחי
+            game = Game(knowledge_base if strategy_name == "dict" or train else None)
+
+            while not game.finished:
+                # 1. תור הסוכן בהתאם לאסטרטגיה
+                if strategy_name == "dict":
+                    game.agent_move()
+                elif strategy_name == "random":
+                    if game.available_places:
+                        place = random.choice(game.available_places)
+                        game.available_places.remove(place)
+                        game.board[place[0]][place[1]] = 1
+                        game.history.append(copy.deepcopy(game.board))
+
+                if game.check_win(1):
+                    agent_wins += 1
+                    game.winner = 1
+                    break
+
+                if not game.available_places:
+                    game.finished = True
+                    game.winner = 0
+                    ties += 1
+                    break
+
+                # 2. תור השחקן (תמיד אקראי)
+                game.player_move()
+                if game.check_win(-1):
+                    game.winner = -1
+                    player_wins += 1
+                    break
+
+                if not game.available_places:
+                    game.finished = True
+                    game.winner = 0
+                    ties += 1
+                    break
+
+            # אם מוגדר שצריך לאמן (train=True), נעדכן את המילון מתוך היסטוריית המשחק הנוכחי
+            if train:
+                rated_boards = game.history_with_str()
+                for board_str, grade in rated_boards:
+                    if board_str not in knowledge_base:
+                        knowledge_base[board_str] = [0.0, 0]
+
+                    grade_sum, count = knowledge_base[board_str]
+                    count += 1
+                    new_grade = grade_sum + (grade - grade_sum) / count
+                    knowledge_base[board_str] = [new_grade, count]
+
+            if (n + 1) % 50000 == 0:
+                print(f"הושלמו {n + 1} משחקים...")
+
+        # אם אימנו, נשמור את המילון המעודכן לקובץ בסוף
+        if train:
+            with open(dict_filename, 'w', encoding='utf-8') as f:
+                json.dump(knowledge_base, f, ensure_ascii=False, indent=4)
+            print(f"האימון הסתיים והמילון עודכן! סך הכל מצבים במילון: {len(knowledge_base)}")
+            print(f"המידע נשמר בהצלחה בקובץ: {dict_filename}")
+
+        print(f"\n--- תוצאות סופיות עבור אסטרטגיה: [{strategy_name}] ---")
+        print(f"ניצחונות לשחקן (Player -1): {player_wins}")
+        print(f"ניצחונות לסוכן (Agent 1): {agent_wins}")
+        print(f"תיקו (Ties): {ties}")
+
+        return {"player": player_wins, "agent": agent_wins, "tie": ties}
+# בלוק ההרצה ממוקם כאן בחוץ, מחוץ למחלקה ובשורה הראשונה משמאל:
+# if __name__ == "__main__":
+#     Games.train_and_save_random_games(num_games=300000, filename="dict.json")
+#
+#     filename = "dict.json"
+#
+#     # Load the JSON file back into a Python dictionary
+#     with open(filename, "r", encoding="utf-8") as f:
+#         knowledge_base = json.load(f)
+#
+#     print(f"Successfully loaded {len(knowledge_base)} unique board states!")
+#
+#     # Create an instance of the Games class to run methods
+#     validator = Games()
+#
+#     # Run validation tests on the loaded dictionary
+#     print("1. All boards are length 16:", validator.all16(knowledge_base))
+#     print("2. Acually a win:", validator.won(knowledge_base))
+#     print(
+#         "3. Near win high grade check:",
+#         validator.near_win_high_grade(knowledge_base),
+#     )
+#     print(
+#         "5. valid_characters", validator.valid_characters(knowledge_base)
+#     )
+#
+#     #checks that the amount of moves of the agent is plus minus 1 compared to the player moves
+#     print("8.validate_turn_order", validator.validate_turn_order(knowledge_base))
+#
+#     print(
+#         "9. Near lose low grade check:",
+#         validator.near_lose_low_grade(knowledge_base),
+#     )
+#
+#     # Plot the score distribution
+#     validator.plot_score_distribution(knowledge_base)
+
+
+
+if __name__ == "__main__":
+    filename = "dict.json"
+
+    # 1. הרצה ואימון של המשחקים (ושמירת התוצאות למעקב)
+    results = Games.run_simulation_with_strategy(
+        num_games=7000000,
+        strategy_name="dict",
+        dict_filename=filename,
+        train=True
+    )
+
+    print(f"\n--- סיכום תוצאות ההרצה ---")
+    print(f"ניצחונות שחקן: {results['player']}")
+    print(f"ניצחונות סוכן: {results['agent']}")
+    print(f"תיקו: {results['tie']}")
+
+    # 2. הגדרה מוקדמת של knowledge_base כברירת מחדל
+    knowledge_base = {}
+
+    # 3. טעינת הקובץ חזרה לזיכרון בצורה בטוחה (לצורך הוולידציה)
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            knowledge_base = json.load(f)
+        print(f"\nSuccessfully loaded {len(knowledge_base)} unique board states!")
+    except FileNotFoundError:
+        print(f"שגיאה: הקובץ {filename} לא נמצא.")
+    except json.JSONDecodeError:
+        print(f"שגיאה: קובץ ה-JSON ב-{filename} פגום או ריק.")
+
+    # 4. יצירת אופציית וולידציה והרצת כל הבדיקות על המילון
+    if knowledge_base:
+        validator = Games()
+
+        print("\n--- Running Validation Tests ---")
+        print("1. All boards are length 16:", validator.all16(knowledge_base))
+        print("2. Actually a win:", validator.won(knowledge_base))
+        print("3. Near win high grade check:", validator.near_win_high_grade(knowledge_base))
+        print("5. Valid characters:", validator.valid_characters(knowledge_base))
+        print("8. Validate turn order:", validator.validate_turn_order(knowledge_base))
+        print("9. Near lose low grade check:", validator.near_lose_low_grade(knowledge_base))
+
+        # 5. הצגת גרף התפלגות הציונים
+        validator.plot_score_distribution(knowledge_base)
+
+        # 6. בדיקה אופציונלית של מצבים כמעט-הפסד (אם יש כאלו ברשימה)
+        if hasattr(validator, 'almost_lose_list') and len(validator.almost_lose_list) > 0:
+            print(f"\nFound {len(validator.almost_lose_list)} near-lose boards to inspect:")
+            sample_key = validator.almost_lose_list[0]
+            temp_game = Game()
+            temp_game.board = temp_game.str_to_board(sample_key)
+            print(temp_game.board)
+    else:
+        print("\nאין נתונים במילון להצגה או לוולידציה.")
+
