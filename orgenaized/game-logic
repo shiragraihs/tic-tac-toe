@@ -1,1 +1,470 @@
+import random
+import copy
+import json
 
+# player is the person (-1) and agent is the computer (1)
+
+class Game:
+    def __init__(self, dict=None):
+        self.dict= dict
+
+        self.SIZE = 4
+        self.board = [
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0]
+        ]
+
+        self.available_places = [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (1, 2), (1, 3), (2, 0), (2, 1), (2, 2),
+                                 (2, 3), (3, 0), (3, 1), (3, 2), (3, 3)]
+        self.history = []
+        self.winner = None
+        self.finished = False
+
+    def player_from_graphics(self, row, col):
+        if self.finished:
+            return False
+
+        if (row, col) in self.available_places:
+            self.available_places.remove((row, col))
+            self.board[row][col] = -1
+            self.history.append(copy.deepcopy(self.board))
+            return True
+        return False
+
+    def player_move(self):
+        if self.finished:
+            return False
+
+        if not self.available_places:
+            return False
+
+        place = random.choice(self.available_places)
+        self.available_places.remove(place)
+        self.board[place[0]][place[1]] = -1
+
+        self.history.append(copy.deepcopy(self.board))
+
+        return True
+
+    def find_winning_or_blocking_move(self, target_val):
+        """
+        מחפש האם ל-target_val (1 לסוכן, -1 לשחקן) יש 3 בטור עם משבצת ריקה אחת.
+        אם כן, מחזיר את הקואורדינטה (row, col) של המשבצת הריקה. אם לא, מחזיר None.
+        """
+        # 1. בדיקת שורות
+        for i in range(self.SIZE):
+            row_vals = self.board[i]
+            if row_vals.count(target_val) == 3 and row_vals.count(0) == 1:
+                j = row_vals.index(0)
+                if (i, j) in self.available_places:
+
+                    return i, j
+
+        # 2. בדיקת עמודות
+        for j in range(self.SIZE):
+            col_vals = [self.board[i][j] for i in range(self.SIZE)]
+            if col_vals.count(target_val) == 3 and col_vals.count(0) == 1:
+                i = col_vals.index(0)
+                if (i, j) in self.available_places:
+
+                    return i, j
+
+        # 3. אלכסון ראשי
+        main_diag = [self.board[i][i] for i in range(self.SIZE)]
+        if main_diag.count(target_val) == 3 and main_diag.count(0) == 1:
+            idx = main_diag.index(0)
+            if (idx, idx) in self.available_places:
+
+                return idx, idx
+
+        # 4. אלכסון משני
+        anti_diag = [self.board[i][self.SIZE - i - 1] for i in range(self.SIZE)]
+        if anti_diag.count(target_val) == 3 and anti_diag.count(0) == 1:
+            idx = anti_diag.index(0)
+            if (idx, self.SIZE - idx - 1) in self.available_places:
+
+                return idx, self.SIZE - idx - 1
+
+        return None
+
+    def agent_move(self):
+        """
+        בוחר מהלך לסוכן בשיטת Epsilon-Greedy:
+        - בסיכוי של epsilon (ברירת מחדל 20%) - בוחר מהלך אקראי לחלוטין (Exploration).
+        - בשאר הזמן (80%) - מששתמש באסטרטגיית המילון הרגילה (Exploitation).
+        """
+        if not self.available_places:
+            return -1,-1
+
+        move= self.find_winning_or_blocking_move(1)
+
+        if not move:
+            move = self.find_winning_or_blocking_move(-1)
+
+        # הגרלת מספר בין 0 ל-1
+        if not move and random.random() <= 0.2:
+            # 20% חקירה: בחירת מהלך אקראי לחלוטין
+            move = random.choice(self.available_places)
+
+        if not move and self.has_half():
+            move=self.use_dict()
+
+        if not move or move==(-1,-1):
+            move = random.choice(self.available_places)
+
+        # --- ביצוע המהלך בפועל ושמירה בהיסטוריה ---
+        row, col = move
+        self.available_places.remove((row,col))
+        self.board[row][col] = 1
+        self.history.append(copy.deepcopy(self.board))
+
+        return row, col
+
+    def check_win(self, player):
+        # The GUI and legacy code sometimes pass 2 for the human player.
+        # Internally the game uses -1 for the human and 1 for the agent.
+        if player == 2:
+            player = -1
+
+        # בדיקת שורות
+        for i in range(self.SIZE):
+            check = True
+            for k in range(self.SIZE):
+                if self.board[i][k] != player:
+                    check = False
+
+            if check:
+                self.finished = True
+                return True
+
+        # בדיקת עמודות
+        for i in range(self.SIZE):
+            check = True
+            for k in range(self.SIZE):
+                if self.board[k][i] != player:
+                    check = False
+
+            if check:
+                self.finished = True
+                return True
+
+        # בדיקת אלכסון ראשי
+        check = True
+        for i in range(self.SIZE):
+            if self.board[i][i] != player:
+                check = False
+        if check:
+            self.finished = True
+            return True
+
+        # בדיקת אלכסון משני
+        check = True
+        for i in range(self.SIZE):
+            if self.board[i][self.SIZE - i - 1] != player:
+                check = False
+        if check:
+            self.finished = True
+            return True
+
+        return False
+
+    def play(self):
+        while not self.finished:
+            self.agent_move()
+            if self.check_win(1):
+                self.winner = 1
+                return 1
+            if not self.available_places:
+                self.finished = True
+                self.winner = 0
+                return 0
+
+            # player plays
+            self.player_move()
+            if self.check_win(-1):
+                self.winner = -1
+                return -1
+
+            if not self.available_places:
+                self.finished = True
+                self.winner = 0
+                return 0
+
+    def play_explore(self):
+
+        while not self.finished:
+            self.agent_move()
+            if self.check_win(1):
+                self.winner = 1
+                return 1
+            if not self.available_places:
+                self.finished = True
+                self.winner = 0
+                return 0
+
+            # player plays
+            self.player_move()
+            if self.check_win(-1):
+                self.winner = -1
+                return -1
+
+            if not self.available_places:
+                self.finished = True
+                self.winner = 0
+                return 0
+
+    # def play(self):
+    #     self.winner = 0
+    #     while not self.finished:
+    #
+    #         # 1. Try to win if possible
+    #         if self.winning_move():
+    #             print("winning move")
+    #         # 2. If can't win, check if we need to defend
+    #         elif self.defensive_move():
+    #             print("defensive move")
+    #         # 3. Otherwise, make a random move
+    #         else:
+    #             self.agent_move()
+    #
+    #         if self.check_win(1):
+    #             self.winner = 1
+    #             return 1
+    #
+    #         if not self.available_places:
+    #             self.finished = True
+    #             self.winner = 0
+    #             return 0
+    #
+    #         # player plays
+    #         self.player_move()
+    #         if self.check_win(-1):
+    #             self.winner = -1
+    #             return -1
+    #
+    #         if not self.available_places:
+    #             self.finished = True
+    #             self.winner = 0
+    #             return 0
+
+    def rating(self):
+        grade=self.winner
+        if grade== 0:
+            grade=0.1
+
+        #list[start : stop : step]
+        reversed_history = self.history[::-1]
+
+        self.rated_boards=[]
+
+        for i in range(len(reversed_history)):
+            board=reversed_history[i]
+
+            self.rated_boards.append((board,grade))
+
+            grade *= 0.9
+
+        return self.rated_boards
+
+    #dictionary
+    def board_to_str(self, board):
+        str_board = ""
+        for i in range(4):
+            for j in range(4):
+                # Convert values to characters or symbols for the string
+                val = board[i][j]
+                if val == -1: #instead of -1 we'll write the num 2 in order to create a string 16 digits long
+                    str_board += "2"
+                elif val == 1:
+                    str_board += "1"
+                else:
+                    str_board += "0"
+        return str_board
+
+    def str_to_board(self, str_board):
+        board = []
+        adding = []
+        for i in range(len(str_board)):
+            char = str_board[i]
+            if char == '2':
+                adding.append(-1)
+            elif char == '1':
+                adding.append(1)
+            else:
+                adding.append(0)
+
+            if len(adding) == 4:
+                board.append(adding)
+                adding = []
+        return board
+
+    def history_with_str (self):
+        grade = self.winner
+        if grade == 0:
+            grade = 0.1
+
+        # list[start : stop : step]
+        reversed_history = self.history[::-1]
+
+        self.rated_str_boards = []
+
+        for i in range(len(reversed_history)):
+            board = self.board_to_str(self.merge(reversed_history[i]))
+
+            self.rated_str_boards.append((board, grade))
+            grade *= 0.9
+
+        return self.rated_str_boards
+
+#no doubles
+    def rotate(self, g): # 90 degrees each time
+        return tuple(zip(*g[::-1]))
+
+    def flip_horizontal(self, g): #right to left
+        return tuple(row[::-1] for row in g)
+
+    def merge (self, b1): #saves only the specific potision of the board
+        symmetries = []
+        curr = b1
+
+        # 2. Loop through all 4 rotational phases, adding both normal and flipped states
+        for _ in range(4):
+            symmetries.append(curr)
+            symmetries.append(self.flip_horizontal(curr))
+            curr = self.rotate(curr)
+
+        # 3. Flatten each 4x4 grid symmetry back into a 16-element flat tuple
+        flat_symmetries = [
+            tuple(cell for row in s for cell in row)
+            for s in symmetries
+        ]
+
+        # 4. Pick and return the lexicographically smallest one as the unique key
+        #meaning saves the board,
+        #compares numbers numerically rather than alphabetically. The rules are straightforward:
+            # -1 is the smallest.
+            # 0 is in the middle.
+            # 1 is the largest.
+
+        board=min(flat_symmetries)
+
+        return [list(board[i * 4: (i + 1) * 4]) for i in range(4)]
+#much safisticated
+#1. uses dict if there is no wining move or lose position
+
+    def use_dict(self):
+        #שימוש במילון אם יש אשפרות
+        best_index = self.find_best()
+
+        if best_index != -1 and not self.finished and len(self.available_places)>0:
+
+            # המרת האינדקס השטוח לשורה ועמודה במטריצה (למשל בלוח 4x4)
+            row = best_index // 4
+            col = best_index % 4
+
+            return row, col
+
+        else:
+            return -1,-1;
+
+    def find_best(self):
+        #עושה נסיונות שונים להחלפת האפסים שבמחרוזת הלוח על מנת למצוא את האפשרות הטובה ביותר למהלך הבא
+        board_str= self.board_to_str(self.board)
+        board_list = list(board_str)
+
+        cur=0
+        max_grade=-float('inf') # מתחילים ממינוס אינסוף
+        best_index = -1
+
+        for i in range(len(board_list)):
+            temp = list(board_list) #כדי לא ליצור הצבעה אחרת עושים כך
+            if board_list[i] == '0':
+                temp[i]='1'
+
+                temp_str = "".join(temp)
+                if temp_str in self.dict:
+                    cur= self.dict[temp_str][0] #cur_grade
+
+                    if cur > max_grade:
+                        max_grade = cur
+                        best_index = i
+
+        return best_index
+
+    def has_half(self):
+        if not self.dict:
+            return False
+
+        poten=len(self.available_places)
+        if poten ==0:
+            return False
+
+        # עושה נסיונות שונים להחלפת האפסים שבמחרוזת הלוח על מנת למצוא את האפשרות הטובה ביותר למהלך הבא
+        board_str = self.board_to_str(self.board)
+        board_list = list(board_str)
+
+        count = 0
+
+        # מעבר ישיר על המשבצות הפנויות במקום לסרוק את כל הלוח        for row, col in self.available_places:
+        # דרך ממש מגניבה
+        for row, col in self.available_places:
+            idx = row * 4 + col
+            temp = list(board_list)
+            temp[idx] = '1'
+            temp_str = "".join(temp)
+
+            if temp_str in self.dict:
+                count+=1  # בודק האם קיים במילון שלי ,קיים- מוסיף 1 לספירה
+
+        return poten / 2 < count #אם יש לי יותר מחצי מהאופציות בפוזציה אז יחזיר נכון
+
+
+# הרצת המשחק
+if __name__ == "__main__":
+
+    with open("dict.json", "r", encoding="utf-8") as f:
+        dict = json.load(f)
+
+    player = 0
+    agent = 0
+    tie = 0
+
+    last_game = None  # To save the last game so we can inspect it
+
+    for n in range(10000):
+        game = Game(dict)
+        result = game.play()
+
+        # Save the game instance so we can look at its history later
+        last_game = game
+
+        if result == 1:
+            agent += 1
+        elif result == -1:
+            player += 1
+        else:
+            tie += 1
+
+    # 1. Print the final stats as requested
+    print("p:", player, " a:", agent, " t:", tie)
+
+    # # 2. Print the rated history of the last game to see the [board, grade] output
+    # print("\n--- Rated History of the Last Game ---")
+    # rated_boards = last_game.rating()
+    # for item in rated_boards:
+    #     print(item)
+    #
+    # #prints the board to str
+    # converted_str = last_game.board_to_str(last_game.board)
+    # print("\nBoard as String:", converted_str)
+    #
+    # #prints the str to board
+    # converted_board = last_game.str_to_board(converted_str)
+    # print("\nString as Board:",  converted_board)
+    #
+    # print("\n--- Rated History of the Last Game as str ---")
+    # rated_boards = last_game.history_with_str ()
+    # for item in rated_boards:
+    #     print(item)
